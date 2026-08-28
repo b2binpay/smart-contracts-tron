@@ -11,6 +11,7 @@
 pragma solidity 0.8.25;
 
 import {DepositAccount, SafeERC20Minimal, IERC20} from "./DepositAccount.sol";
+import {MultiSigWalletPermissions} from "./MultiSigWalletPermissions.sol";
 import {IFactory} from "./interfaces/IFactory.sol";
 import {IERC1271} from "./interfaces/IERC1271.sol";
 import {Address} from "./utils/Address.sol";
@@ -24,7 +25,7 @@ import {EnumerableSet} from "./utils/structs/EnumerableSet.sol";
  * @dev MultiSig contract through which it is possible to compute a deposit address using `CREATE2`
  * to receive ETH, ERC20 tokens and to collect or payout deposits into one transaction.
  */
-contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
+contract MultiSigWallet is EIP712, ReentrancyGuard, MultiSigWalletPermissions, IERC1271, IFactory {
     using EnumerableSet for EnumerableSet.AddressSet;
     using SafeERC20Minimal for IERC20;
 
@@ -36,8 +37,6 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
     error InvalidSignatureLength(uint256 length);
     error InsufficientSignatures(uint256 signatures, uint256 threshold);
     error InvalidRequirement(uint256 ownerCount, uint256 threshold);
-    error InvalidWhitelistUpdate(uint256 accounts, uint256 statuses);
-    error InvalidWhitelistAddress(address account);
     error SetupFail(uint256 ownerCount, uint256 threshold);
 
     /**
@@ -49,11 +48,6 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
      * @dev Emitted when the contract owners and threshold are set up.
      */
     event SetConfig(address sender, uint256 ownerCount, uint256 threshold);
-
-    /**
-     * @dev Emitted when a whitelist entry is added or removed.
-     */
-    event SetWhitelist(address indexed account, bool status);
 
     // EIP-712 typehash for call
     bytes32 internal constant CALL_TYPEHASH = keccak256("Call(address to,uint256 value,bytes data)");
@@ -103,9 +97,6 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
     // List of addresses that control the `Factory`
     EnumerableSet.AddressSet private _owners;
 
-    // Set of addresses authorized to call `claim` (in addition to owners)
-    EnumerableSet.AddressSet private _whitelist;
-
     // Number of owners required to approve a transaction
     uint256 private _threshold;
 
@@ -123,10 +114,12 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
     }
 
     /**
-     * @dev Restricts function calls to owners and whitelisted addresses.
+     * @dev Restricts function calls to owners and to addresses holding `permission`.
+     * @param permission A declared permission bit. A mask of several bits requires the account to hold
+     *        all of them.
      */
-    modifier onlyOwnerOrWhitelisted() {
-        if (!_owners.contains(msg.sender) && !_whitelist.contains(msg.sender)) {
+    modifier onlyOwnerOrPermitted(uint256 permission) {
+        if (!_owners.contains(msg.sender) && !_permitted(msg.sender, permission)) {
             revert UnauthorizedAccount(msg.sender);
         }
         _;
@@ -164,11 +157,15 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
      * @notice Sets an initial owners.
      * @dev This method can only be called once.
      *      If a contract was created without setting up, anyone can call setup and claim the contract.
+     *      An extension whose permissions reach into the base range cannot be initialized at all: see
+     *      {MultiSigWalletPermissions-_assertExtensionPermissions}.
      * @param owners_ List of owners.
      * @param threshold_ Number of required confirmations for a transaction.
      */
     function setup(address[] calldata owners_, uint256 threshold_) external {
         if (_owners.length() == 0 && _threshold == 0) {
+            _assertExtensionPermissions();
+
             _setConfig(owners_, threshold_);
         } else {
             revert SetupFail(_owners.length(), _threshold);
@@ -180,7 +177,7 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
      * @return The version of the contract as a string.
      */
     function version() public pure returns (string memory) {
-        return "1.2.0";
+        return "1.3.0";
     }
 
     /**
@@ -229,22 +226,6 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
      */
     function isOwner(address account) public view returns (bool) {
         return _owners.contains(account);
-    }
-
-    /**
-     * @notice Returns a list of whitelisted addresses.
-     * @return Array of whitelisted addresses.
-     */
-    function whitelist() public view returns (address[] memory) {
-        return _whitelist.values();
-    }
-
-    /**
-     * @notice Returns if `account` is whitelisted.
-     * @return Boolean if `account` is whitelisted.
-     */
-    function isWhitelisted(address account) public view returns (bool) {
-        return _whitelist.contains(account);
     }
 
     /**
@@ -375,31 +356,15 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
     }
 
     /**
-     * @notice Updates the claim whitelist.
-     * @dev Adds or removes addresses from the whitelist based on the provided statuses.
-     * @param accounts Array of addresses to update.
-     * @param statuses Array of booleans (true = add, false = remove).
+     * @notice Updates the permission masks stored for the given addresses.
+     * @dev See {MultiSigWalletPermissions-_updatePermissions}.
      */
-    function setWhitelist(address[] calldata accounts, bool[] calldata statuses) external onlyFactory {
-        if (accounts.length != statuses.length) {
-            revert InvalidWhitelistUpdate(accounts.length, statuses.length);
-        }
-
-        for (uint256 i = 0; i < accounts.length; i++) {
-            if (accounts[i] == address(0)) {
-                revert InvalidWhitelistAddress(address(0));
-            }
-
-            if (statuses[i]) {
-                if (_whitelist.add(accounts[i])) {
-                    emit SetWhitelist(accounts[i], true);
-                }
-            } else {
-                if (_whitelist.remove(accounts[i])) {
-                    emit SetWhitelist(accounts[i], false);
-                }
-            }
-        }
+    function updatePermissions(
+        address[] calldata accounts,
+        uint256[] calldata grants,
+        uint256[] calldata revokes
+    ) external onlyFactory {
+        _updatePermissions(accounts, grants, revokes);
     }
 
     /**
@@ -421,7 +386,10 @@ contract MultiSigWallet is EIP712, ReentrancyGuard, IERC1271, IFactory {
      * @param erc20 The address of the ERC20 token to collect from each `DepositAccount`.
      * @param accountIds An array of IDs of the accounts used to compute `DepositAccount` addresses.
      */
-    function claim(address erc20, bytes32[] calldata accountIds) external nonReentrant onlyOwnerOrWhitelisted {
+    function claim(
+        address erc20,
+        bytes32[] calldata accountIds
+    ) external nonReentrant onlyOwnerOrPermitted(PERMISSION_CLAIM) {
         for (uint256 i = 0; i < accountIds.length; i++) {
             _claim(erc20, address(this), accountIds[i]);
         }

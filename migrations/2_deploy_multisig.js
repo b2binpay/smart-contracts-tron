@@ -1,5 +1,5 @@
-const MultiSigWallet = artifacts.require("./MultiSigWallet.sol");
+const MultiSigWalletStaking = artifacts.require("MultiSigWalletStaking");
 
 module.exports = (deployer) => {
-  deployer.deploy(MultiSigWallet);
+  deployer.deploy(MultiSigWalletStaking);
 };

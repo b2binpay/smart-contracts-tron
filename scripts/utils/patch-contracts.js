@@ -31,6 +31,15 @@ function copyTree(source, dest) {
   }
 }
 
+if (!fs.existsSync(SOURCE) || !fs.statSync(SOURCE).isDirectory()) {
+  console.error(`No {${SOURCE}} directory found — run \`npm run copy-contracts\` first.`);
+  process.exit(1);
+}
+
+// `DEST` is a pure function of `SOURCE` + `ISTANBUL`: dropping it first turns a source renamed or
+// removed upstream into a deletion `git status` shows, instead of a stale file that keeps compiling.
+fs.rmSync(DEST, { recursive: true, force: true });
+
 ensureDir(DEST);
 copyTree(SOURCE, DEST);
 console.log(`Patched #pragma -> ${DEST}`);

@@ -8,6 +8,7 @@ const OUTPUT_DIR = path.resolve(__dirname, "..", "..", "build", SOLC_TARGET, "fl
 // Contracts to flatten (entry points for verification)
 const ENTRY_CONTRACTS = [
   "MultiSigWallet.sol",
+  "tvm/MultiSigWalletStaking.sol",
   "ProxyFactory.sol",
   "DepositAccount.sol",
   "FactoryA.sol",
@@ -97,6 +98,7 @@ if (available.length === 0) {
 for (const contract of available) {
   const flattened = flatten(contract, CONTRACTS_DIR);
   const outFile = path.join(OUTPUT_DIR, contract);
+  fs.mkdirSync(path.dirname(outFile), { recursive: true });
   fs.writeFileSync(outFile, flattened);
   console.log(`Flattened: ${contract} -> ${outFile}`);
 }

@@ -1,6 +1,6 @@
 {
   "name": "b2binpay-tvm-smart-contracts",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "B2BinPay TVM Smart Contracts",
   "scripts": {
     "copy-contracts": "rm -rf ./contracts && cp -r ../evm/contracts ./contracts",
@@ -9,9 +9,16 @@
     "compile": ". ./.env && npx tronbox compile --all",
     "flatten": ". ./.env && node scripts/utils/flatten-contracts.js ${SOLC_TARGET}",
     "migrate": ". ./.env && npx tronbox migrate --network development",
+    "migrate:usdt": ". ./.env && npx tronbox migrate --network development --f 3 --to 3",
     "migrate:shasta": ". ./.env && npx tronbox migrate --network shasta",
+    "migrate:shasta:multisig": ". ./.env && npx tronbox migrate --network shasta --f 2 --to 2",
+    "migrate:shasta:usdt": ". ./.env && npx tronbox migrate --network shasta --f 3 --to 3",
     "migrate:mainnet": ". ./.env && npx tronbox migrate --network mainnet",
+    "migrate:mainnet:multisig": ". ./.env && npx tronbox migrate --network mainnet --f 2 --to 2",
     "demo": ". ./.env && node scripts/demoMultiSig.js",
+    "demo:usdt": ". ./.env && node scripts/demoMultiSig.usdt.js",
+    "test:staking": ". ./.env && node scripts/testStakingMultisig.js",
+    "test:staking:extras": ". ./.env && node scripts/testStakingMultisigExtras.js",
     "lint:js": "biome check",
     "lint:js:fix": "biome check --write"
   },
@@ -27,7 +34,11 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "ethers": "^6.13.5",
-    "tronbox": "^4.4.0",
+    "tronbox": "^4.8.0",
     "tronweb": "^6.0.4"
+  },
+  "engines": {
+    "node": "^24.16.0",
+    "npm": "^11.0.0"
   }
 }

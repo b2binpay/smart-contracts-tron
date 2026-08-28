@@ -14,7 +14,14 @@ const {
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { DEPOSITS, ERC20_NAME, ERC20_SYMBOL, ERC20_INITIAL_SUPPLY, TRON_FEE_LIMIT } = require("./utils/constants");
+const {
+  DEPOSITS,
+  ERC20_NAME,
+  ERC20_SYMBOL,
+  ERC20_INITIAL_SUPPLY,
+  TRON_FEE_LIMIT,
+  PERMISSION_CLAIM,
+} = require("./utils/constants");
 
 const SOLC_TARGET = process.env.SOLC_TARGET || "0.8.25";
 
@@ -25,6 +32,19 @@ const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, `../build/${SOLC_TARGET}/contracts`);
 
 const tronWeb = new TronWeb(PROVIDER_URI, PROVIDER_URI, PROVIDER_URI, PRIVATE_KEY);
+
+/**
+ * The claim list, filtered out of the permission index. TronWeb may hand a multi-output call back as a
+ * positional tuple rather than by output name, so both shapes are read. A decode that yields neither
+ * shape throws here rather than printing an empty list, which would read as "nobody holds the claim bit".
+ */
+async function claimHolders(wallet) {
+  const entries = await wallet.permissions().call();
+  const accounts = entries.accounts || entries[0];
+  const masks = entries.masks || entries[1];
+
+  return accounts.filter((_, i) => (BigInt(masks[i]) & PERMISSION_CLAIM) !== 0n);
+}
 
 async function main() {
   // ---------- Load artifacts ----------
@@ -168,7 +188,7 @@ async function main() {
   console.log("  ┣ Version  :", await wallet.version().call());
   console.log("  ┣ Threshold:", (await wallet.threshold().call()).toString());
   console.log("  ┣ Owners   :", await wallet.owners().call());
-  console.log("  ┗ Whitelist:", await wallet.whitelist().call());
+  console.log("  ┗ Permitted:", await claimHolders(wallet));
 
   console.log("\n| Compute CREATE2 addresses for deposits (using data before creating the wallet) |");
 
@@ -193,10 +213,14 @@ async function main() {
 
   console.log("\n| DEMO |\n");
 
-  console.log("\n╭ Whitelist deployer for claim operations |");
+  console.log("\n╭ Grant the deployer the claim permission |");
   {
     const deployerHex20 = toHex20(tronWeb.defaultAddress.hex);
-    const data = encodeFunction("setWhitelist(address[],bool[])", [[deployerHex20], [true]]);
+    const data = encodeFunction("updatePermissions(address[],uint256[],uint256[])", [
+      [deployerHex20],
+      [PERMISSION_CLAIM],
+      [0n],
+    ]);
     const calls = [{ to: walletHex, value: 0n, data }];
 
     const { digest, signature } = await signExecuteCalls(walletHex, calls, null, null, owner1.privateKey);
@@ -205,7 +229,8 @@ async function main() {
     const tx = await executeOps(wallet, calls, packed);
     await waitTxInfo(tronWeb, tx);
     await sleep();
-    console.log(`╰ Whitelist: ${await wallet.whitelist().call()}`);
+    console.log(`| Claim permission holders: ${await claimHolders(wallet)}`);
+    console.log(`╰ Deployer permissions: ${await wallet.permissionsOf(deployerHex20).call()}`);
   }
 
   console.log("\n╭ Fund 0.01 TRX & 10 ERC20 to deposit #0 |");

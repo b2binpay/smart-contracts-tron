@@ -2,4 +2,5 @@
 node_modules
 build
 .env
-/contracts.DS_Store
+/contracts
+.DS_Store
