@@ -1,0 +1,33 @@
+{
+  "name": "b2binpay-tvm-smart-contracts",
+  "version": "1.2.0",
+  "description": "B2BinPay TVM Smart Contracts",
+  "scripts": {
+    "copy-contracts": "rm -rf ./contracts && cp -r ../evm/contracts ./contracts",
+    "patch-contracts": ". ./.env && node scripts/utils/patch-contracts.js ${SOLC_TARGET}",
+    "clean": "rm -rf build contracts",
+    "compile": ". ./.env && npx tronbox compile --all",
+    "flatten": ". ./.env && node scripts/utils/flatten-contracts.js ${SOLC_TARGET}",
+    "migrate": ". ./.env && npx tronbox migrate --network development",
+    "migrate:shasta": ". ./.env && npx tronbox migrate --network shasta",
+    "migrate:mainnet": ". ./.env && npx tronbox migrate --network mainnet",
+    "demo": ". ./.env && node scripts/demoMultiSig.js",
+    "lint:js": "biome check",
+    "lint:js:fix": "biome check --write"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b2binpay/smart-contracts-tron.git"
+  },
+  "homepage": "https://github.com/b2binpay/smart-contracts-tron#readme",
+  "bugs": {
+    "url": "https://github.com/b2binpay/smart-contracts-tron/issues"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "ethers": "^6.13.5",
+    "tronbox": "^4.4.0",
+    "tronweb": "^6.0.4"
+  }
+}
